@@ -1,0 +1,28 @@
+{
+  "name": "mememan",
+  "version": "1.0.0",
+  "description": "Discord bot",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hodgyj/MemeMan.git"
+  },
+  "author": "hodgyj",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/hodgyj/MemeMan/issues"
+  },
+  "homepage": "https://github.com/hodgyj/MemeMan#readme",
+  "dependencies": {
+    "@discordjs/opus": "^0.1.0",
+    "discord.js": "^12.1.1",
+    "ffmpeg-static": "^4.0.1",
+    "ytdl-core": "^2.0.1"
+  },
+  "devDependencies": {
+    "eslint": "^6.8.0"
+  }
+}
