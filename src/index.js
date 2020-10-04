@@ -94,7 +94,7 @@ async function playNext(channelId) {
 async function handleMessage(message, command, data) {
     switch (command) {
         case "help": {
-            message.reply("```$play <sound name or YouTube URL or YouTube search term>\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL>\n$list - List downloaded sounds\n$skip - Skips currently playing sound```");
+            message.reply("```$play <sound name or YouTube URL or YouTube search term>\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL or search term>\n$list - List downloaded sounds\n$skip - Skips currently playing sound```");
             break;
         }
         case "add": {
