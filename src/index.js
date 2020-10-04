@@ -1,10 +1,13 @@
 const Discord = require("discord.js");
 const ytdl = require("ytdl-core");
 const fs = require("fs");
+const { exit } = require("process");
 
 const client = new Discord.Client();
 
 const connections = {};
+
+let opId = "";
 
 function play(connection, data) {
     let player;
@@ -28,6 +31,21 @@ function play(connection, data) {
         playNext(player.player.voiceConnection.channel.id);
     });
     return player;
+}
+
+function skip(connection) {
+    connection.player.destroy();
+    connections[connection.channel.id].player = null;
+    playNext(connection.channel.id);
+}
+
+function boost(connection) {
+    const dispatcher = connection.dispatcher;
+    if (dispatcher.volume === 1) {
+        dispatcher.setVolume(10);
+    } else {
+        dispatcher.setVolume(1);
+    }
 }
 
 function addToQueue(channelId, data) {
@@ -62,7 +80,7 @@ function playNext(channelId) {
 async function handleMessage(message, command, data) {
     switch (command) {
         case "help": {
-            message.reply("```$play <sound name or YouTube URL>\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL>```");
+            message.reply("```$play <sound name or YouTube URL>\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL>\n$list - List downloaded sounds\n$skip - Skips currently playing sound```");
             break;
         }
         case "add": {
@@ -90,8 +108,11 @@ async function handleMessage(message, command, data) {
             if (!message.guild) return;
             if (!message.member.voice.channel) {
                 message.reply("You aren't in a voice channel!");
+                await message.react("😠");
                 return;
             }
+
+            if (data.replace(" ", "") === "") return;
 
             let connection = null;
             if (!connections[message.member.voice.channel.id]) {
@@ -110,6 +131,41 @@ async function handleMessage(message, command, data) {
             await message.react("✅");
             break;
         }
+        case "skip": {
+            if (!message.guild) return;
+            if (!message.member.voice.channel) {
+                message.reply("You aren't in a voice channel!");
+                await message.react("😠");
+                return;
+            }
+            if (!connections[message.member.voice.channel.id]) return;
+
+            const connection = connections[message.member.voice.channel.id].connection;
+
+            skip(connection);
+            await message.react("✅");
+
+            break;
+        }
+        case "boost": {
+            if (!message.guild) return;
+            if (message.member.id !== opId) {
+                await message.react("😠");
+                return;
+            }
+            if (!message.member.voice.channel) {
+                message.reply("You aren't in a voice channel!");
+                await message.react("😠");
+                return;
+            }
+            if (!connections[message.member.voice.channel.id]) return;
+
+            const connection = connections[message.member.voice.channel.id].connection;
+            boost(connection);
+            await message.react("✅");
+                
+            break;
+        }
         case "stop": {
             if (!message.guild) return;
             if (!message.member.voice.channel) {
@@ -121,7 +177,9 @@ async function handleMessage(message, command, data) {
             connections[message.member.voice.channel.id].queue = [];
 
             // Hopefully this stops?
-            connections[message.member.voice.channel.id].connection.disconnect();
+            const connection = connections[message.member.voice.channel.id].connection;
+            connection.player.destroy();
+            connection.disconnect();
             delete connections[message.member.voice.channel.id];
             break;
         }
@@ -129,11 +187,25 @@ async function handleMessage(message, command, data) {
             if (!message.guild) return;
             if (!message.member.voice.channel) {
                 message.reply("You aren't in a voice channel!");
+                await message.react("😠");
                 return;
             }
             if (!connections[message.member.voice.channel.id]) return;
 
             connections[message.member.voice.channel.id].queue = [];
+            await message.react("✅");
+            break;
+        }
+        case "list": {
+            const dirs = fs.readdirSync("./sounds/", {withFileTypes: true})
+                .filter(dirent => dirent.isDirectory())
+                .map(dirent => dirent.name);
+            let reply = "```";
+            for (let i = 0; i < dirs.length; i++) {
+                reply += `\n${dirs[i]}`
+            }
+            reply += "\n```"
+            message.reply(reply);
             break;
         }
         default: {
@@ -168,6 +240,13 @@ client.on('message', async message => {
 
 if (!fs.existsSync("./token.txt")) {
     console.error("Token file (token.txt) doesn't exist!");
+    exit(1)
+}
+
+if (fs.existsSync("./op.txt")) {
+    opId = fs.readFileSync("./op.txt", {encoding : "utf8"}).replace("\n", "");
+} else {
+    console.error("op.txt doesn't exist!");
 }
 
 client.login(fs.readFileSync("./token.txt", {encoding: "utf8"}).replace("\n", ""));
