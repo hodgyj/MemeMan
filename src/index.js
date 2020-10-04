@@ -2,14 +2,19 @@ const Discord = require("discord.js");
 const ytdl = require("ytdl-core");
 const fs = require("fs");
 const { exit } = require("process");
+const search = require("youtube-search");
 
 const client = new Discord.Client();
+
+// From http://urlregex.com/
+const urlRegex = /((([A-Za-z]{3,9}:(?:\/\/)?)(?:[\-;:&=\+\$,\w]+@)?[A-Za-z0-9\.\-]+|(?:www\.|[\-;:&=\+\$,\w]+@)[A-Za-z0-9\.\-]+)((?:\/[\+~%\/\.\w\-_]*)?\??(?:[\-\+=&;%@\.\w_]*)#?(?:[\.\!\/\\\w]*))?)/
 
 const connections = {};
 
 let opId = "";
+let ytApiKey = "";
 
-function play(connection, data) {
+async function play(connection, data) {
     let player;
     if (fs.existsSync(`./sounds/${data}`)) {
         const files = [];
@@ -22,8 +27,21 @@ function play(connection, data) {
             const file = files[Math.floor(Math.random() * files.length)];
             player = connection.play(`./sounds/${data}/${file}`);
         }
-    } else {
+    } else if (urlRegex.test(data)) {
         player = connection.play(ytdl(data, {filter: "audioonly"}));
+    } else {
+        // Search YouTube
+        const result = await new Promise((resolve, reject) => {
+            search(data, {
+                maxResults: 1,
+                key: ytApiKey
+            }, function(err, results) {
+                if(err) return console.log(err);
+
+                resolve(results[0]);
+              });
+        });
+        player = connection.play(ytdl(result.link, {filter: "audioonly"}));
     }
     player.on("finish", () => {
         player.destroy();
@@ -33,19 +51,15 @@ function play(connection, data) {
     return player;
 }
 
-function skip(connection) {
+async function skip(connection) {
     connection.player.destroy();
     connections[connection.channel.id].player = null;
-    playNext(connection.channel.id);
+    await playNext(connection.channel.id);
 }
 
-function boost(connection) {
+function volume(connection, volume) {
     const dispatcher = connection.dispatcher;
-    if (dispatcher.volume === 1) {
-        dispatcher.setVolume(10);
-    } else {
-        dispatcher.setVolume(1);
-    }
+    dispatcher.setVolume(volume);
 }
 
 function addToQueue(channelId, data) {
@@ -56,7 +70,7 @@ function addToQueue(channelId, data) {
 /**
  * Plays the next song in the queue (if one exists)
  */
-function playNext(channelId) {
+async function playNext(channelId) {
     if (connections[channelId] === undefined) return;
     if (connections[channelId].queue.length === 0) {
         if (connections[channelId].player !== null) return;
@@ -67,12 +81,12 @@ function playNext(channelId) {
     if (connections[channelId].player !== null) return;
 
     const conn = connections[channelId].connection;
-    connections[channelId].player = play(conn, connections[channelId].queue.shift());
+    connections[channelId].player = await play(conn, connections[channelId].queue.shift());
 }
 
 /**
  * Handles a command sent from discord
- * 
+ *
  * @param {Discord.Message} message - The discord message object
  * @param {string} command - The command text
  * @param {string} data - The rest of the string
@@ -80,7 +94,7 @@ function playNext(channelId) {
 async function handleMessage(message, command, data) {
     switch (command) {
         case "help": {
-            message.reply("```$play <sound name or YouTube URL>\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL>\n$list - List downloaded sounds\n$skip - Skips currently playing sound```");
+            message.reply("```$play <sound name or YouTube URL or YouTube search term>\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL>\n$list - List downloaded sounds\n$skip - Skips currently playing sound```");
             break;
         }
         case "add": {
@@ -90,7 +104,21 @@ async function handleMessage(message, command, data) {
             }
             const split = data.split(" ");
             const commandName = split[0];
-            const url = split[1];
+            let url = split[1];
+            if (!urlRegex.test(url)) {
+                // Search YouTube
+                const result = await new Promise((resolve, reject) => {
+                    search(url, {
+                        maxResults: 1,
+                        key: ytApiKey
+                    }, function(err, results) {
+                        if(err) return console.log(err);
+
+                        resolve(results[0]);
+                    });
+                });
+                url = result.link
+            }
             const id = ytdl.getURLVideoID(url);
             if (!fs.existsSync(`./sounds/${commandName}`)) {
                 fs.mkdirSync(`./sounds/${commandName}`);
@@ -100,7 +128,7 @@ async function handleMessage(message, command, data) {
                 message.reply("That link has already been downloaded!");
                 return;
             }
-            ytdl(data, {filter: "audioonly"}).pipe(fs.createWriteStream(`./sounds/${commandName}/${id}`));
+            ytdl(url, {filter: "audioonly"}).pipe(fs.createWriteStream(`./sounds/${commandName}/${id}`));
             message.react("✅")
             break;
         }
@@ -127,7 +155,7 @@ async function handleMessage(message, command, data) {
             }
 
             addToQueue(connection.channel.id, data);
-            playNext(connection.channel.id);
+            await playNext(connection.channel.id);
             await message.react("✅");
             break;
         }
@@ -142,12 +170,12 @@ async function handleMessage(message, command, data) {
 
             const connection = connections[message.member.voice.channel.id].connection;
 
-            skip(connection);
+            await skip(connection);
             await message.react("✅");
 
             break;
         }
-        case "boost": {
+        case "volume": {
             if (!message.guild) return;
             if (message.member.id !== opId) {
                 await message.react("😠");
@@ -161,9 +189,10 @@ async function handleMessage(message, command, data) {
             if (!connections[message.member.voice.channel.id]) return;
 
             const connection = connections[message.member.voice.channel.id].connection;
-            boost(connection);
+
+            volume(connection, Number(data));
             await message.react("✅");
-                
+
             break;
         }
         case "stop": {
@@ -176,7 +205,6 @@ async function handleMessage(message, command, data) {
 
             connections[message.member.voice.channel.id].queue = [];
 
-            // Hopefully this stops?
             const connection = connections[message.member.voice.channel.id].connection;
             connection.player.destroy();
             connection.disconnect();
@@ -247,6 +275,12 @@ if (fs.existsSync("./op.txt")) {
     opId = fs.readFileSync("./op.txt", {encoding : "utf8"}).replace("\n", "");
 } else {
     console.error("op.txt doesn't exist!");
+}
+
+if (fs.existsSync("./yt_api_key.txt")) {
+    ytApiKey = fs.readFileSync("./yt_api_key.txt", {encoding : "utf8"}).replace("\n", "");
+} else {
+    console.error("yt_api_key.txt doesn't exist!");
 }
 
 client.login(fs.readFileSync("./token.txt", {encoding: "utf8"}).replace("\n", ""));
