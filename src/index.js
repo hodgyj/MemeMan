@@ -236,6 +236,17 @@ async function handleMessage(message, command, data) {
             message.reply(reply);
             break;
         }
+        case "lonely": {
+            if (!message.guild) return;
+            if (!message.member.voice.channel) {
+                await message.react("😠");
+                return;
+            }
+
+            message.member.voice.setChannel(message.guild.channels.resolveID("443513051870920705"));
+
+            break;
+        }
         default: {
             message.reply(`Unknown command ${command}`);
             message.react("😠");
