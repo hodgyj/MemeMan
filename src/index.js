@@ -3,6 +3,7 @@ const ytdl = require("ytdl-core");
 const fs = require("fs");
 const { exit } = require("process");
 const search = require("youtube-search");
+const randomWords = require("random-words");
 
 const client = new Discord.Client();
 
@@ -242,8 +243,8 @@ async function handleMessage(message, command, data) {
                 await message.react("😠");
                 return;
             }
-
-            message.member.voice.setChannel(message.guild.channels.resolveID("443513051870920705"));
+            const channel = await message.guild.channels.create(`${message.member.displayName} is lonely`, {type: "voice", userLimit: 1});
+            message.member.voice.setChannel(channel);
 
             break;
         }
@@ -276,6 +277,48 @@ client.on('message', async message => {
 
     }
 });
+
+client.on('voiceStateUpdate', async (oldState, newState) => {
+    if (!oldState.guild || !newState.guild) return;
+    if (oldState.guild !== newState.guild) return;
+
+    // Limit servers in case its still in servers I forgot
+    if(newState.guild.id !== "696354397340565504" &&
+        newState.guild.id !== "252509975841079296") return;
+
+    if (oldState.channelID !== undefined &&
+        oldState.channelID !== null &&
+        oldState.channel.userLimit === 1 &&
+        oldState.channel.name.slice(-6) === "lonely" &&
+        oldState.channelID !== newState.channelID &&
+        oldState.channel.editable) {
+        await oldState.channel.delete();
+    }
+
+    const guild = await newState.guild.fetch()
+    const channels = guild.channels.cache.array();
+    const emptyChannels = [];
+    for (let i = 0; i < channels.length; i++) {
+        if (channels[i].type === "voice") {
+            if (channels[i].members.array().length === 0) {
+                emptyChannels.push(channels[i]);
+            }
+        }
+    }
+
+    console.log(`${emptyChannels.length} empty channels`);
+
+    if (emptyChannels.length > 1) {
+        // Remove channels
+        for (let i = emptyChannels.length - 1; i >= 1; i--) {
+            if (emptyChannels[i].editable) emptyChannels[i].delete();
+        }
+    } else if (emptyChannels.length === 0) {
+        // Create a channel
+        newState.guild.channels.create(randomWords({exactly: 2, join: '-'}), {type: "voice"});
+    }
+
+})
 
 if (!fs.existsSync("./token.txt")) {
     console.error("Token file (token.txt) doesn't exist!");
