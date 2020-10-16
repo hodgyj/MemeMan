@@ -59,7 +59,8 @@ async function play(connection, data) {
             if (result !== null) {
                 const playlistResult = await youtube.playlistItems.list({
                     part: "contentDetails",
-                    playlistId: result[1]
+                    playlistId: result[1],
+                    maxResults: 50
                 });
                 const items = playlistResult.data.items;
 
@@ -133,7 +134,7 @@ async function playNext(channelId) {
 async function handleMessage(message, command, data) {
     switch (command) {
         case "help": {
-            message.reply("```$play <sound name or YouTube URL or YouTube search term>\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL or search term>\n$list - List downloaded sounds\n$skip - Skips currently playing sound```");
+            message.reply("```$play <sound name or YouTube URL or YouTube search term or YouTube playlist URL (up to 50 items)>\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL or search term>\n$list - List downloaded sounds\n$skip - Skips currently playing sound```");
             break;
         }
         case "add": {
