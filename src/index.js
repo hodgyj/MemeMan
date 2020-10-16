@@ -2,8 +2,8 @@ const Discord = require("discord.js");
 const ytdl = require("ytdl-core");
 const fs = require("fs");
 const { exit } = require("process");
-const search = require("youtube-search");
 const randomWords = require("random-words");
+const { google } = require("googleapis");
 
 const client = new Discord.Client();
 
@@ -14,6 +14,29 @@ const connections = {};
 
 let opId = "";
 let ytApiKey = "";
+
+if (!fs.existsSync("./token.txt")) {
+    console.error("Token file (token.txt) doesn't exist!");
+    exit(1)
+}
+
+if (fs.existsSync("./op.txt")) {
+    opId = fs.readFileSync("./op.txt", {encoding : "utf8"}).replace("\n", "");
+} else {
+    console.error("op.txt doesn't exist!");
+}
+
+if (fs.existsSync("./yt_api_key.txt")) {
+    ytApiKey = fs.readFileSync("./yt_api_key.txt", {encoding : "utf8"}).replace("\n", "");
+} else {
+    console.error("yt_api_key.txt doesn't exist!");
+    exit(1);
+}
+
+const youtube = google.youtube({
+    version: "v3",
+    auth: ytApiKey
+});
 
 async function play(connection, data) {
     let player;
@@ -29,20 +52,35 @@ async function play(connection, data) {
             player = connection.play(`./sounds/${data}/${file}`);
         }
     } else if (urlRegex.test(data)) {
-        player = connection.play(ytdl(data, {filter: "audioonly"}));
+        const playlistRegex = /^http(s)?:\/\/(www.)?youtube.com\/playlist\?/i;
+        if (playlistRegex.test(data)) {
+            const playlistIdRegex = /list=([^&]+)/i;
+            const result = playlistIdRegex.exec(data);
+            if (result !== null) {
+                const playlistResult = await youtube.playlistItems.list({
+                    part: "contentDetails",
+                    playlistId: result[1]
+                });
+                const items = playlistResult.data.items;
+
+                // Play first item, then queue the rest
+                player = connection.play(ytdl(items[0].contentDetails.videoId, {filter: "audioonly"}));
+
+                for (let i = 1; i < items.length; i++) {
+                    addToQueue(connection.channel.id, `https://www.youtube.com/watch?v=${items[i].contentDetails.videoId}`);
+                }
+            }
+        } else {
+            player = connection.play(ytdl(data, {filter: "audioonly"}));
+        }
     } else {
         // Search YouTube
-        const result = await new Promise((resolve, reject) => {
-            search(data, {
-                maxResults: 1,
-                key: ytApiKey
-            }, function(err, results) {
-                if(err) return console.log(err);
-
-                resolve(results[0]);
-              });
+        const result = await youtube.search.list({
+            part: "snippet",
+            maxResults: 1,
+            q: data
         });
-        player = connection.play(ytdl(result.link, {filter: "audioonly"}));
+        player = connection.play(ytdl(result.data.items[0].id.videoId, {filter: "audioonly"}));
     }
     player.on("finish", () => {
         player.destroy();
@@ -106,21 +144,19 @@ async function handleMessage(message, command, data) {
             const split = data.split(" ");
             const commandName = split[0];
             let url = split[1];
+            let search = false;
             if (!urlRegex.test(url)) {
                 // Search YouTube
-                const result = await new Promise((resolve, reject) => {
-                    search(url, {
-                        maxResults: 1,
-                        key: ytApiKey
-                    }, function(err, results) {
-                        if(err) return console.log(err);
-
-                        resolve(results[0]);
-                    });
+                // Search YouTube
+                const result = await youtube.search.list({
+                    part: "snippet",
+                    maxResults: 1,
+                    q: data
                 });
-                url = result.link
+                url = result.data.items[0].id.videoId
+                search = true;
             }
-            const id = ytdl.getURLVideoID(url);
+            const id = (search) ? url : ytdl.getURLVideoID(url);
             if (!fs.existsSync(`./sounds/${commandName}`)) {
                 fs.mkdirSync(`./sounds/${commandName}`);
             }
@@ -129,7 +165,7 @@ async function handleMessage(message, command, data) {
                 message.reply("That link has already been downloaded!");
                 return;
             }
-            ytdl(url, {filter: "audioonly"}).pipe(fs.createWriteStream(`./sounds/${commandName}/${id}`));
+            ytdl(id, {filter: "audioonly"}).pipe(fs.createWriteStream(`./sounds/${commandName}/${id}`));
             message.react("✅")
             break;
         }
@@ -319,23 +355,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     }
 
 })
-
-if (!fs.existsSync("./token.txt")) {
-    console.error("Token file (token.txt) doesn't exist!");
-    exit(1)
-}
-
-if (fs.existsSync("./op.txt")) {
-    opId = fs.readFileSync("./op.txt", {encoding : "utf8"}).replace("\n", "");
-} else {
-    console.error("op.txt doesn't exist!");
-}
-
-if (fs.existsSync("./yt_api_key.txt")) {
-    ytApiKey = fs.readFileSync("./yt_api_key.txt", {encoding : "utf8"}).replace("\n", "");
-} else {
-    console.error("yt_api_key.txt doesn't exist!");
-}
 
 client.login(fs.readFileSync("./token.txt", {encoding: "utf8"}).replace("\n", ""));
 
