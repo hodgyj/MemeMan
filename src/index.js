@@ -38,56 +38,99 @@ const youtube = google.youtube({
     auth: ytApiKey
 });
 
+async function getPlaylistItems(playlistId) {
+    let items = [];
+    try {
+        let playlistResult = await youtube.playlistItems.list({
+            part: "contentDetails",
+            playlistId: playlistId,
+            maxResults: 50
+        });
+        if (Object.prototype.hasOwnProperty.call(playlistResult, "data")
+            && Object.prototype.hasOwnProperty.call(playlistResult.data, "items")) {
+            items = items.concat(playlistResult.data.items);
+
+            while (Object.prototype.hasOwnProperty.call(playlistResult.data, "nextPageToken")) {
+                playlistResult = await youtube.playlistItems.list({
+                    part: "contentDetails",
+                    playlistId: playlistId,
+                    maxResults: 50,
+                    pageToken: playlistResult.data.nextPageToken
+                });
+                if (Object.prototype.hasOwnProperty.call(playlistResult, "data")
+                    && Object.prototype.hasOwnProperty.call(playlistResult.data, "items")) {
+                    items = items.concat(playlistResult.data.items);
+                }
+            }
+        }
+    } catch (error) {
+        console.error(error);
+    }
+    return items;
+}
+
 async function play(connection, data) {
     let player;
+    console.log(`Playing "${data}"`);
     if (fs.existsSync(`./sounds/${data}`)) {
+        console.log(`  - "${data}" directory exists`);
         const files = [];
         fs.readdirSync(`./sounds/${data}`).forEach(file => {
             files.push(file);
         });
         if (files.length === 0) {
-            player = connection.play(ytdl(data, {filter: "audioonly"}));
+            // Remove empty directory
+            console.log(`  - "${data}" directory is empty, removing directory`);
+            fs.rmdirSync(`./sounds/${data}`);
+            playNext(connection.channel.id);
+            return;
         } else {
+            console.log(`  - Playing from ${data}`);
             const file = files[Math.floor(Math.random() * files.length)];
             player = connection.play(`./sounds/${data}/${file}`);
         }
     } else if (urlRegex.test(data)) {
+        console.log("  - Is a URL");
         const playlistRegex = /^http(s)?:\/\/(www.)?youtube.com\/playlist\?/i;
         if (playlistRegex.test(data)) {
+            console.log("  - Is a playlist URL");
             const playlistIdRegex = /list=([^&]+)/i;
             const result = playlistIdRegex.exec(data);
             if (result !== null) {
-                const playlistResult = await youtube.playlistItems.list({
-                    part: "contentDetails",
-                    playlistId: result[1],
-                    maxResults: 50
-                });
-                const items = playlistResult.data.items;
+                const items = await getPlaylistItems(result[1]);
 
-                // Play first item, then queue the rest
-                player = connection.play(ytdl(items[0].contentDetails.videoId, {filter: "audioonly"}));
-
-                for (let i = 1; i < items.length; i++) {
+                for (let i = 0; i < items.length; i++) {
                     addToQueue(connection.channel.id, `https://www.youtube.com/watch?v=${items[i].contentDetails.videoId}`);
                 }
+                console.log(`    - Added ${items.length} items to queue.`);
+                playNext(connection.channel.id);
+                return;
+
             }
         } else {
+            console.log("  - Playing with YTDL");
             player = connection.play(ytdl(data, {filter: "audioonly"}));
         }
     } else {
+        console.log(`  - Searching YouTube for "${data}"`);
         // Search YouTube
         const result = await youtube.search.list({
             part: "snippet",
             maxResults: 1,
             q: data
         });
-        player = connection.play(ytdl(result.data.items[0].id.videoId, {filter: "audioonly"}));
+        console.log(`    - Playing "${result.data.items[0].snippet.title}"`);
+        player = connection.play(ytdl(result.data.items[0].id.videoId));
     }
     player.on("finish", () => {
-        player.destroy();
         connections[player.player.voiceConnection.channel.id].player = null;
         playNext(player.player.voiceConnection.channel.id);
     });
+    player.on("error", (e) => {
+        console.error(e);
+        connections[player.player.voiceConnection.channel.id].player = null;
+        playNext(player.player.voiceConnection.channel.id);
+    })
     return player;
 }
 
@@ -147,7 +190,6 @@ async function handleMessage(message, command, data) {
             let url = split[1];
             let search = false;
             if (!urlRegex.test(url)) {
-                // Search YouTube
                 // Search YouTube
                 const result = await youtube.search.list({
                     part: "snippet",
