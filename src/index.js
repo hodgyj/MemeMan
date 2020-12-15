@@ -8,8 +8,9 @@ const { google } = require("googleapis");
 const client = new Discord.Client();
 
 // From http://urlregex.com/
-const urlRegex = /((([A-Za-z]{3,9}:(?:\/\/)?)(?:[\-;:&=\+\$,\w]+@)?[A-Za-z0-9\.\-]+|(?:www\.|[\-;:&=\+\$,\w]+@)[A-Za-z0-9\.\-]+)((?:\/[\+~%\/\.\w\-_]*)?\??(?:[\-\+=&;%@\.\w_]*)#?(?:[\.\!\/\\\w]*))?)/
+const urlRegex = /((([A-Za-z]{3,9}:(?:\/\/)?)(?:[\-;:&=\+\$,\w]+@)?[A-Za-z0-9\.\-]+|(?:www\.|[\-;:&=\+\$,\w]+@)[A-Za-z0-9\.\-]+)((?:\/[\+~%\/\.\w\-_]*)?\??(?:[\-\+=&;%@\.\w_]*)#?(?:[\.\!\/\\\w]*))?)/;
 
+const taggedUserIdRegex = /[<][@][!](\d+)[>]\s*([^\n\r]+)$/;
 const connections = {};
 
 let opId = "";
@@ -168,6 +169,18 @@ async function playNext(channelId) {
 }
 
 /**
+ * 
+ */
+async function changeNickname(user, nick) {
+    try {
+        await user.setNickname(nick);
+    } catch {
+        return false;
+    }
+    return true;
+}
+
+/**
  * Handles a command sent from discord
  *
  * @param {Discord.Message} message - The discord message object
@@ -177,7 +190,7 @@ async function playNext(channelId) {
 async function handleMessage(message, command, data) {
     switch (command) {
         case "help": {
-            message.reply("```$play <sound name or YouTube URL or YouTube search term or YouTube playlist URL (up to 50 items)>\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL or search term>\n$list - List downloaded sounds\n$skip - Skips currently playing sound```");
+            message.reply("```$play <sound name or YouTube URL or YouTube search term or YouTube playlist URL (up to 50 items)>\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL or search term>\n$list - List downloaded sounds\n$skip - Skips currently playing sound\n$nick / $nickname - Change a users nickname\n\te.g. $nick Shania\n\tor   $nick @hodgyj Shania Twain```");
             break;
         }
         case "add": {
@@ -324,6 +337,41 @@ async function handleMessage(message, command, data) {
             }
             const channel = await message.guild.channels.create(`${message.member.displayName} is lonely`, {type: "voice", userLimit: 1});
             message.member.voice.setChannel(channel);
+
+            break;
+        }
+        case "nick":
+        case "nickname": {
+            if (!message.guild) return;
+            if (!message.member) return;
+            if (!message.member.guild) return;
+
+            let member = message.member;
+            let nick = data;
+
+            const result = taggedUserIdRegex.exec(data);
+            if (result !== null) {
+                if (result.length < 3) {
+                    await message.react("😠");
+                    break;
+                }
+                let memberId = result[1];
+                nick = result[2];
+
+                try {
+                    member = await message.guild.members.fetch(memberId);   
+                } catch (e) {
+                    console.error(e);
+                    await message.react("😠");
+                    break;
+                }
+            }
+            
+            if (await changeNickname(member, nick)) {
+                await message.react("✅");
+            } else {
+                await message.react("😠");
+            }
 
             break;
         }
