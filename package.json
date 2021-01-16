@@ -23,7 +23,7 @@
     "googleapis": "^61.0.0",
     "random-words": "^1.1.1",
     "sodium": "^3.0.2",
-    "ytdl-core": "^4.1.4"
+    "ytdl-core": "^4.4.3"
   },
   "devDependencies": {
     "eslint": "^6.8.0"
