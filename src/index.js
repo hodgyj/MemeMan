@@ -169,7 +169,7 @@ async function playNext(channelId) {
 }
 
 /**
- * 
+ *
  */
 async function changeNickname(user, nick) {
     try {
@@ -190,7 +190,7 @@ async function changeNickname(user, nick) {
 async function handleMessage(message, command, data) {
     switch (command) {
         case "help": {
-            message.reply("```$play <sound name or YouTube URL or YouTube search term or YouTube playlist URL (up to 50 items)>\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL or search term>\n$list - List downloaded sounds\n$skip - Skips currently playing sound\n$nick / $nickname - Change a users nickname\n\te.g. $nick Shania\n\tor   $nick @hodgyj Shania Twain```");
+            message.reply("```$play <sound name or YouTube URL or YouTube search term or YouTube playlist URL (up to 50 items)>\n$shuffle <optional n> - Play n random sounds\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL or search term>\n$list - List downloaded sounds\n$skip - Skips currently playing sound\n$nick / $nickname - Change a users nickname\n\te.g. $nick Shania\n\tor   $nick @hodgyj Shania Twain```");
             break;
         }
         case "add": {
@@ -248,6 +248,53 @@ async function handleMessage(message, command, data) {
             }
 
             addToQueue(connection.channel.id, data);
+            await playNext(connection.channel.id);
+            await message.react("✅");
+            break;
+        }
+        case "shuffle": {
+            if (!message.guild) return;
+            if (!message.member.voice.channel) {
+                message.reply("You aren't in a voice channel!");
+                await message.react("😠");
+                return;
+            }
+
+            let connection = null;
+            if (!connections[message.member.voice.channel.id]) {
+                connection = await message.member.voice.channel.join();
+                connections[connection.channel.id] = {
+                    connection: connection,
+                    queue: [],
+                    player: null
+                };
+            } else {
+                connection = connections[message.member.voice.channel.id].connection;
+            }
+
+            // Find random here
+            const dirList = fs.readdirSync("./sounds", {withFileTypes: true});
+            const dirs = [];
+            for (let i = 0; i < dirList.length; i++) {
+                if (dirList[i].isDirectory()) {
+                    dirs.push(dirList[i].name);
+                }
+            }
+            console.log(data);
+
+            let numFiles = parseInt(data);
+            if (numFiles === NaN) {
+                numFiles = 1;
+            } else if (numFiles <= 0) {
+                numFiles = 1;
+            }
+
+            for (let i = 0; i < numFiles; i++)
+            {
+                const rand = Math.floor((Math.random() * dirs.length));
+                addToQueue(connection.channel.id, dirs[rand]);
+            }
+
             await playNext(connection.channel.id);
             await message.react("✅");
             break;
@@ -359,14 +406,14 @@ async function handleMessage(message, command, data) {
                 nick = result[2];
 
                 try {
-                    member = await message.guild.members.fetch(memberId);   
+                    member = await message.guild.members.fetch(memberId);
                 } catch (e) {
                     console.error(e);
                     await message.react("😠");
                     break;
                 }
             }
-            
+
             if (await changeNickname(member, nick)) {
                 await message.react("✅");
             } else {
