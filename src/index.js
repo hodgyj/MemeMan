@@ -148,6 +148,7 @@ function volume(connection, volume) {
 
 function addToQueue(channelId, data) {
     if (!connections[channelId]) return;
+    console.log(`Queueing "${data}"`);
     connections[channelId].queue.push(data);
 }
 
@@ -280,7 +281,6 @@ async function handleMessage(message, command, data) {
                     dirs.push(dirList[i].name);
                 }
             }
-            console.log(data);
 
             let numFiles = parseInt(data);
             if (numFiles === NaN) {
