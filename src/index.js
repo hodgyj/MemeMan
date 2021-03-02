@@ -4,6 +4,9 @@ const fs = require("fs");
 const { exit } = require("process");
 const randomWords = require("random-words");
 const { google } = require("googleapis");
+const sox = require("sox-stream");
+const stream = require("stream");
+const prism = require("prism-media");
 
 const client = new Discord.Client();
 
@@ -70,33 +73,81 @@ async function getPlaylistItems(playlistId) {
     return items;
 }
 
+function createPlayer(connection, readStream, soxArgs) {
+    console.log("Creating player");
+    const transcoder = new prism.FFmpeg({
+        args: [
+            '-f', 'flac',
+            '-acodec', 'flac'
+        ]
+    });
+
+    transcoder.on('error', function(err) {
+        console.log("transcoder: " + err);
+    })
+
+    const soxStream = sox({
+        global: '-V0',
+        input: {
+            type: 'flac',
+        },
+        output: {
+            type: 'flac',
+            rate: '48000'
+        },
+        effects: soxArgs
+    });
+
+    soxStream.on('error', function(err) {
+        console.log("soxstream: " + err);
+    })
+
+    const passStream = stream.PassThrough();
+
+    passStream.on('error', function(err) {
+        console.log("passthrough: " + err);
+    })
+
+    readStream.pipe(transcoder).pipe(soxStream).pipe(passStream);
+    // readStream.pipe(soxStream).pipe(passStream);
+
+    return connection.play(passStream);
+}
+
 async function play(connection, data) {
     let player;
-    console.log(`Playing "${data}"`);
-    if (fs.existsSync(`./sounds/${data}`)) {
-        console.log(`  - "${data}" directory exists`);
+    let soxArgs = [];
+    let soundName = data;
+    if (data.includes(";")) {
+        const split = data.split(";");
+        soundName = split[0].trim();
+        soxArgs = split[1].trim().split(" ");
+    }
+    console.log(`Playing "${soundName}"`);
+    if (fs.existsSync(`./sounds/${soundName}`)) {
+        console.log(`  - "${soundName}" directory exists`);
         const files = [];
-        fs.readdirSync(`./sounds/${data}`).forEach(file => {
+        fs.readdirSync(`./sounds/${soundName}`).forEach(file => {
             files.push(file);
         });
         if (files.length === 0) {
             // Remove empty directory
-            console.log(`  - "${data}" directory is empty, removing directory`);
-            fs.rmdirSync(`./sounds/${data}`);
+            console.log(`  - "${soundName}" directory is empty, removing directory`);
+            fs.rmdirSync(`./sounds/${soundName}`);
             playNext(connection.channel.id);
             return;
         } else {
-            console.log(`  - Playing from ${data}`);
-            const file = files[Math.floor(Math.random() * files.length)];
-            player = connection.play(`./sounds/${data}/${file}`);
+            console.log(`  - Playing from ${soundName}`);
+            const file = fs.createReadStream(`./sounds/${soundName}/${files[Math.floor(Math.random() * files.length)]}`);
+            player = createPlayer(connection, file, soxArgs);
         }
-    } else if (urlRegex.test(data)) {
+    } else if (urlRegex.test(soundName)) {
         console.log("  - Is a URL");
         const playlistRegex = /^http(s)?:\/\/(www.)?youtube.com\/playlist\?/i;
-        if (playlistRegex.test(data)) {
+        if (playlistRegex.test(soundName)) {
             console.log("  - Is a playlist URL");
             const playlistIdRegex = /list=([^&]+)/i;
-            const result = playlistIdRegex.exec(data);
+            const result = playlistIdRegex.exec(soundName);
             if (result !== null) {
                 const items = await getPlaylistItems(result[1]);
 
@@ -110,18 +161,19 @@ async function play(connection, data) {
             }
         } else {
             console.log("  - Playing with YTDL");
-            player = connection.play(ytdl(data, {filter: "audioonly"}));
+            // player = connection.play(ytdl(soundName, {filter: "audioonly"}));
+            player = createPlayer(connection, ytdl(soundName, {filter: "audioonly"}), soxArgs);
         }
     } else {
-        console.log(`  - Searching YouTube for "${data}"`);
+        console.log(`  - Searching YouTube for "${soundName}"`);
         // Search YouTube
         const result = await youtube.search.list({
             part: "snippet",
             maxResults: 1,
-            q: data
+            q: soundName
         });
         console.log(`    - Playing "${result.data.items[0].snippet.title}"`);
-        player = connection.play(ytdl(result.data.items[0].id.videoId));
+        player = createPlayer(connection, ytdl(result.data.items[0].id.videoId, {filter: "audioonly"}), soxArgs);
     }
     player.on("finish", () => {
         connections[player.player.voiceConnection.channel.id].player = null;
@@ -480,16 +532,19 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         }
     }
 
-    console.log(`${emptyChannels.length} empty channels`);
-
     if (emptyChannels.length > 1) {
         // Remove channels
         for (let i = emptyChannels.length - 1; i >= 1; i--) {
-            if (emptyChannels[i].editable) emptyChannels[i].delete();
+            if (emptyChannels[i].editable) {
+                console.log(`Deleting channel "${emptyChannels[i].name}"`);
+                emptyChannels[i].delete();
+            }
         }
     } else if (emptyChannels.length === 0) {
         // Create a channel
-        newState.guild.channels.create(randomWords({exactly: 2, join: '-'}), {type: "voice"});
+        const newName = randomWords({exactly: 2, join: '-'});
+        console.log(`Creating channel "${newName}"`);
+        newState.guild.channels.create(newName, {type: "voice"});
     }
 
 })
