@@ -24,8 +24,8 @@
     "prism-media": "^1.2.7",
     "random-words": "^1.1.1",
     "sodium": "^3.0.2",
-    "ytdl-core": "^4.4.4",
-    "sox-stream": "^2.0.6"
+    "sox-stream": "^2.0.6",
+    "ytdl-core": "^4.4.4"
   },
   "devDependencies": {
     "eslint": "^6.8.0"

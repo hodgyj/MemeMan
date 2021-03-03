@@ -87,7 +87,9 @@ function createPlayer(connection, readStream, soxArgs) {
     })
 
     const soxStream = sox({
-        global: '-V0',
+        global: {
+            "-V1": false
+        },
         input: {
             type: 'flac',
         },
@@ -109,9 +111,14 @@ function createPlayer(connection, readStream, soxArgs) {
     })
 
     readStream.pipe(transcoder).pipe(soxStream).pipe(passStream);
-    // readStream.pipe(soxStream).pipe(passStream);
 
-    return connection.play(passStream);
+    return {
+        // player: connection.play(tempFile.path),
+        player: connection.play(passStream),
+        transcoder: transcoder,
+        soxStream: soxStream,
+        passStream: passStream
+    };
 }
 
 async function play(connection, data) {
@@ -175,14 +182,16 @@ async function play(connection, data) {
         console.log(`    - Playing "${result.data.items[0].snippet.title}"`);
         player = createPlayer(connection, ytdl(result.data.items[0].id.videoId, {filter: "audioonly"}), soxArgs);
     }
-    player.on("finish", () => {
-        connections[player.player.voiceConnection.channel.id].player = null;
-        playNext(player.player.voiceConnection.channel.id);
+
+    player.player.on("finish", () => {
+        console.log("finish");
+        connections[player.player.player.voiceConnection.channel.id].player = null;
+        playNext(player.player.player.voiceConnection.channel.id);
     });
-    player.on("error", (e) => {
+    player.player.on("error", (e) => {
         console.error(e);
-        connections[player.player.voiceConnection.channel.id].player = null;
-        playNext(player.player.voiceConnection.channel.id);
+        connections[player.player.player.voiceConnection.channel.id].player = null;
+        playNext(player.player.player.voiceConnection.channel.id);
     })
     return player;
 }
@@ -243,7 +252,7 @@ async function changeNickname(user, nick) {
 async function handleMessage(message, command, data) {
     switch (command) {
         case "help": {
-            message.reply("```$play <sound name or YouTube URL or YouTube search term or YouTube playlist URL (up to 50 items)>\n$shuffle <optional n> - Play n random sounds\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL or search term>\n$list - List downloaded sounds\n$skip - Skips currently playing sound\n$nick / $nickname - Change a users nickname\n\te.g. $nick Shania\n\tor   $nick @hodgyj Shania Twain```");
+            message.reply("```$play <sound name or YouTube URL or YouTube search term or YouTube playlist URL (up to 50 items)> ; sox arguments\n\tExample: $play bustin ; speed 2\n$shuffle <optional n> - Play n random sounds\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL or search term>\n$list - List downloaded sounds\n$skip - Skips currently playing sound\n$nick / $nickname - Change a users nickname\n\te.g. $nick Shania\n\tor   $nick @hodgyj Shania Twain```");
             break;
         }
         case "add": {
