@@ -252,7 +252,7 @@ async function changeNickname(user, nick) {
 async function handleMessage(message, command, data) {
     switch (command) {
         case "help": {
-            message.reply("```$play <sound name or YouTube URL or YouTube search term or YouTube playlist URL (up to 50 items)> ; sox arguments\n\tExample: $play bustin ; speed 2\n$shuffle <optional n> - Play n random sounds\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL or search term>\n$list - List downloaded sounds\n$skip - Skips currently playing sound\n$nick / $nickname - Change a users nickname\n\te.g. $nick Shania\n\tor   $nick @hodgyj Shania Twain\n\n--\nMeme Man is open source! Pls contribute @ https://github.com/hodgyj/MemeMan```");
+            message.reply("```$play <sound name or YouTube URL or YouTube search term or YouTube playlist URL (up to 50 items)> ; sox effects arguments\n\tExample: $play bustin ; speed 2\n\thttp://sox.sourceforge.net/sox.html#EFFECTS\n$shuffle <optional n> - Play n random sounds\n$stop - Close immediately\n$finish - Stop after current sound\n$add <sound name> <YouTube URL or search term>\n$list - List downloaded sounds\n$skip - Skips currently playing sound\n$nick / $nickname - Change a users nickname\n\te.g. $nick Shania\n\tor   $nick @hodgyj Shania Twain\n\n--\nMeme Man is open source! Pls contribute @ https://github.com/hodgyj/MemeMan```");
             break;
         }
         case "add": {
