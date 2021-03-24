@@ -114,3 +114,6 @@ op.txt
 
 # YouTube API key
 yt_api_key.txt
+
+# Config file
+config.json

@@ -3,7 +3,10 @@
         "es6": true,
         "node": true
     },
-    "extends": "eslint:recommended",
+    "extends": [
+        "eslint:recommended",
+        "plugin:jsdoc/recommended"
+    ],
     "globals": {
         "Atomics": "readonly",
         "SharedArrayBuffer": "readonly"
@@ -13,5 +16,13 @@
         "sourceType": "module"
     },
     "rules": {
+        "jsdoc/require-hyphen-before-param-description": ["error", "always"],
+        "quotes": ["error", "double", {"allowTemplateLiterals": true}],
+        "prefer-template": "error",
+        "prefer-arrow-callback": "error",
+        "semi": ["error", "always"],
+        "semi-style": ["error", "last"],
+        "semi-spacing": ["error", {"before": false, "after": true}],
+        "no-var": "error"
     }
 }
