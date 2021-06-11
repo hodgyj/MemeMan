@@ -1,37 +1,13 @@
 const Discord = require("discord.js");
-const fs = require("fs");
 const { exit } = require("process");
-const { loadConfig } = require("./helpers/configHelper");
-const { parseMessage } = require("./discord/message");
 
-// Discord client object
-let client = new Discord.Client();
-const configPath = "./config.json";
+const Manager = require("./Manager.js");
 
-/**
- * Cleans up the Discord client
- */
-function cleanup() {
-    console.debug("Cleaning up client");
-    // close voice connections here
-    client.destroy();
-}
-
-if (!fs.existsSync(configPath)) {
-    console.error("config.json file does not exist");
-    exit(1);
-}
-
-const config = loadConfig(configPath);
+const config = require("../config.json");
 
 if (!Object.prototype.hasOwnProperty.call(config, "token")) {
     console.error("Config does not contain a 'token' key");
     exit(1);
-}
-
-if (!Object.prototype.hasOwnProperty.call(config, "ops")) {
-    console.log("Config does not contain a 'ops' key, the following commands won't work:");
-    console.log("volume");
 }
 
 if (!Object.prototype.hasOwnProperty.call(config, "prefix")) {
@@ -39,37 +15,51 @@ if (!Object.prototype.hasOwnProperty.call(config, "prefix")) {
     config.prefix = "$";
 }
 
+// Discord client object
+const manager = new Manager(new Discord.Client(), config);
+
+if (!Object.prototype.hasOwnProperty.call(config, "ops")) {
+    console.log("Config does not contain a 'ops' key, some commands will be unavailable");
+    manager.opsEnabled = false;
+}
+
+/**
+ * Cleans up the Discord client
+ */
+function cleanup() {
+    console.debug("Cleaning up client");
+    // close voice connections here
+    manager.client.destroy();
+}
+
 // Event handlers for client
-client.on("ready", () => {
+manager.client.on("ready", () => {
     console.debug("Received ready event");
     console.log("Logged in");
 });
 
-client.on("message", (message) => {
+manager.client.on("message", async (message) => {
     console.debug("Received message event");
-    const parsed = parseMessage(message, config.prefix);
-    if (parsed.iscommand) {
-        console.debug(`Received command ${parsed.command}`);
-    }
+    await manager.parseMessage(message);
 });
 
-client.on("voiceStateUpdate", (oldState, newState) => {
+manager.client.on("voiceStateUpdate", (oldState, newState) => {
     console.debug("Received voiceStateUpdate event");
 });
 
-client.on("error", (err) => {
+manager.client.on("error", (err) => {
     console.error("An error occurred with the bot:");
     console.error(err);
     console.error("Recreating client");
 
     cleanup();
 
-    client = new Discord.Client();
-    client.login(config.token);
+    manager.client = new Discord.Client();
+    manager.client.login(config.token);
 });
 
 console.log("Logging in to Discord");
-client.login(config.token);
+manager.client.login(config.token);
 
 process.on("SIGINT", () => {
     console.debug("Received SIGINT");
